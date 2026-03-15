@@ -1,16 +1,29 @@
 <script>
-  import { showSoulOverlay } from '$lib/stores/session.js';
-  import { submitEntry } from '$lib/stores/session.js';
+  import { showSoulOverlay, sessionId, enterVault } from '$lib/stores/session.js';
 
-  let tokenValue = '';
-  let isSubmitting = false;
+  let inputValue = '';
+  let loading = false;
+  let localError = '';
 
-  function handleSubmit() {
-    if (!tokenValue.trim() || isSubmitting) return;
-    isSubmitting = true;
-    submitEntry(tokenValue.trim());
-    tokenValue = '';
-    isSubmitting = false;
+  async function handleSubmit() {
+    if (!inputValue.trim() || loading) return;
+
+    loading = true;
+    localError = '';
+
+    try {
+      await enterVault(inputValue.trim());
+      // enterVault closes the overlay on success by setting showSoulOverlay = false
+      // and sets sessionId — if it failed it throws and we catch below
+    } catch (err) {
+      localError = err?.message ?? 'Failed to enter vault';
+    } finally {
+      // Only clear loading if overlay is still open (i.e. we didn't succeed)
+      loading = false;
+      if ($sessionId) {
+        inputValue = '';
+      }
+    }
   }
 
   function handleKeydown(e) {
@@ -36,7 +49,7 @@
     <div class="overlay-card" role="dialog" aria-modal="true" aria-labelledby="vault-title">
       <div class="vault-header">
         <h2 class="vault-title" id="vault-title">ENTER THE VAULT</h2>
-        <p class="vault-sub">Authenticate with your soul token to begin traversal</p>
+        <p class="vault-sub">Submit a query to begin axon-graph traversal</p>
       </div>
 
       <div class="vault-body">
@@ -45,25 +58,35 @@
           <input
             type="text"
             class="soul-input"
-            placeholder="your soul token..."
-            bind:value={tokenValue}
+            placeholder="your query or soul token..."
+            bind:value={inputValue}
             on:keydown={handleKeydown}
             autofocus
             autocomplete="off"
             spellcheck="false"
+            disabled={loading}
           />
         </div>
+
+        {#if localError}
+          <p class="inline-error" role="alert">{localError}</p>
+        {/if}
 
         <button
           class="submit-btn"
           on:click={handleSubmit}
-          disabled={!tokenValue.trim() || isSubmitting}
+          disabled={!inputValue.trim() || loading}
         >
-          {isSubmitting ? 'ENTERING...' : 'ENTER GRAPH'}
+          {#if loading}
+            <span class="spinner" aria-hidden="true"></span>
+            ENTERING…
+          {:else}
+            ENTER GRAPH
+          {/if}
         </button>
       </div>
 
-      <button class="close-btn" on:click={() => showSoulOverlay.set(false)} aria-label="Close">
+      <button class="close-btn" on:click={() => showSoulOverlay.set(false)} aria-label="Close" disabled={loading}>
         ✕
       </button>
     </div>
@@ -163,6 +186,23 @@
     font-style: italic;
   }
 
+  .soul-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .inline-error {
+    font-family: var(--mono-dark);
+    font-size: 11px;
+    color: rgba(220, 100, 100, 0.9);
+    letter-spacing: 0.03em;
+    margin: 0;
+    padding: 6px 10px;
+    background: rgba(220, 80, 80, 0.08);
+    border: 1px solid rgba(220, 80, 80, 0.25);
+    border-radius: 2px;
+  }
+
   .submit-btn {
     width: 100%;
     padding: 12px 20px;
@@ -176,6 +216,10 @@
     letter-spacing: 0.14em;
     cursor: pointer;
     transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
   }
 
   .submit-btn:hover:not(:disabled) {
@@ -187,6 +231,22 @@
   .submit-btn:disabled {
     opacity: 0.35;
     cursor: not-allowed;
+  }
+
+  /* Loading spinner */
+  .spinner {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid rgba(232, 200, 122, 0.3);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 
   .close-btn {
@@ -203,7 +263,12 @@
     transition: color 0.2s ease;
   }
 
-  .close-btn:hover {
+  .close-btn:hover:not(:disabled) {
     color: var(--text);
+  }
+
+  .close-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
   }
 </style>

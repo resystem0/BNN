@@ -1,5 +1,4 @@
 <script>
-  import { onMount } from 'svelte';
   import GraphCanvas from '$lib/components/game/GraphCanvas.svelte';
   import StoryPane from '$lib/components/game/StoryPane.svelte';
   import ChoiceCards from '$lib/components/game/ChoiceCards.svelte';
@@ -7,22 +6,16 @@
   import SoulOverlay from '$lib/components/game/SoulOverlay.svelte';
   import {
     currentNode,
-    blockHeight,
-    hopsCount,
-    tokensSpent,
-    sessionEarned,
-    validatorCount,
-    activeMiners,
     sessionId,
+    hopCount,
+    wsConnected,
+    isTerminal,
+    lastError,
   } from '$lib/stores/session.js';
 
-  onMount(() => {
-    // Simulate block height incrementing
-    const interval = setInterval(() => {
-      blockHeight.update((h) => h + 1);
-    }, 12000);
-    return () => clearInterval(interval);
-  });
+  function dismissError() {
+    lastError.set(null);
+  }
 </script>
 
 <svelte:head>
@@ -60,32 +53,29 @@
       </div>
       <div class="stat-row">
         <span class="stat-l">HOPS</span>
-        <span class="stat-v">{$hopsCount}</span>
+        <span class="stat-v">{$hopCount}</span>
       </div>
       <div class="stat-row">
-        <span class="stat-l">TOKENS</span>
-        <span class="stat-v">{$tokensSpent}</span>
-      </div>
-      <div class="stat-row">
-        <span class="stat-l">EARNED τ</span>
-        <span class="stat-v teal">{$sessionEarned.toFixed(4)}</span>
+        <span class="stat-l">STATUS</span>
+        <span class="stat-v {$isTerminal ? 'amber' : 'teal'}">
+          {$isTerminal ? 'TERMINAL' : ($sessionId ? 'ACTIVE' : 'IDLE')}
+        </span>
       </div>
     </div>
 
     <!-- Network status -->
     <div class="stats-block">
-      <div class="block-heading">NETWORK</div>
-      <div class="stat-row">
-        <span class="stat-l">BLOCK</span>
-        <span class="stat-v">{$blockHeight?.toLocaleString()}</span>
+      <div class="block-heading">
+        NETWORK
+        <span class="ws-dot" class:connected={$wsConnected} title={$wsConnected ? 'Connected' : 'Disconnected'}></span>
       </div>
       <div class="stat-row">
-        <span class="stat-l">VALIDATORS</span>
-        <span class="stat-v">{$validatorCount}</span>
+        <span class="stat-l">GATEWAY</span>
+        <span class="stat-v {$wsConnected ? 'teal' : 'dim'}">{$wsConnected ? 'LIVE' : 'OFFLINE'}</span>
       </div>
       <div class="stat-row">
-        <span class="stat-l">MINERS</span>
-        <span class="stat-v">{$activeMiners}</span>
+        <span class="stat-l">SESSION</span>
+        <span class="stat-v mono-sm">{$sessionId ? $sessionId.slice(0, 12) + '…' : '—'}</span>
       </div>
     </div>
 
@@ -108,8 +98,16 @@
   </aside>
 </div>
 
-<!-- Soul token overlay (portal rendered) -->
+<!-- Soul token overlay -->
 <SoulOverlay />
+
+<!-- Error toast -->
+{#if $lastError}
+  <div class="error-toast" role="alert">
+    <span class="error-msg">{$lastError}</span>
+    <button class="error-dismiss" on:click={dismissError} aria-label="Dismiss error">✕</button>
+  </div>
+{/if}
 
 <style>
   .game-layout {
@@ -200,6 +198,23 @@
     background: var(--border);
   }
 
+  .ws-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(220, 215, 205, 0.2);
+    flex-shrink: 0;
+    transition: background 0.3s ease;
+    /* placed before the ::after rule so it doesn't sit on the line */
+    order: -1;
+    margin-left: auto;
+  }
+
+  .ws-dot.connected {
+    background: var(--accent2);
+    box-shadow: 0 0 5px rgba(0, 229, 176, 0.5);
+  }
+
   .stat-row {
     display: flex;
     justify-content: space-between;
@@ -229,8 +244,11 @@
     white-space: nowrap;
   }
 
-  .stat-v.gold { color: var(--gold); }
-  .stat-v.teal { color: var(--accent2); }
+  .stat-v.gold  { color: var(--gold); }
+  .stat-v.teal  { color: var(--accent2); }
+  .stat-v.amber { color: var(--gold-dim, #b8963a); }
+  .stat-v.dim   { color: var(--text-dim); }
+  .stat-v.mono-sm { font-size: 10px; letter-spacing: 0.04em; }
 
   /* Nav links */
   .nav-links {
@@ -262,5 +280,53 @@
     font-size: 12px;
     color: var(--accent);
     flex-shrink: 0;
+  }
+
+  /* Error toast */
+  .error-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border: 1px solid rgba(220, 80, 80, 0.5);
+    border-radius: 2px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+    z-index: 2000;
+    animation: toast-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    max-width: calc(100vw - 48px);
+  }
+
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+  }
+
+  .error-msg {
+    font-family: var(--mono-dark);
+    font-size: 12px;
+    font-weight: 400;
+    color: rgba(220, 120, 120, 1);
+    letter-spacing: 0.03em;
+  }
+
+  .error-dismiss {
+    font-size: 12px;
+    color: var(--text-dim);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 4px;
+    line-height: 1;
+    flex-shrink: 0;
+    transition: color 0.15s ease;
+  }
+
+  .error-dismiss:hover {
+    color: var(--text);
   }
 </style>

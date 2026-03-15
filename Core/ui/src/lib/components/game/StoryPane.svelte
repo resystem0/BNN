@@ -1,13 +1,12 @@
 <script>
-  import { sessionId, blockHeight, wsConnected, streamBuffer, isStreaming } from '$lib/stores/session.js';
-  import { showSoulOverlay } from '$lib/stores/session.js';
+  import { sessionId, wsConnected, streamBuffer, isStreaming, showSoulOverlay, hopCount } from '$lib/stores/session.js';
 </script>
 
 <div class="story-pane">
   <!-- Header bar -->
   <div class="header-bar">
     <span class="session-id">{$sessionId ?? 'NO SESSION'}</span>
-    <span class="epoch-chip">EPOCH {$blockHeight?.toLocaleString()}</span>
+    <span class="epoch-chip">HOP {$hopCount}</span>
     <span class="status-dot" class:connected={$wsConnected} title={$wsConnected ? 'Connected' : 'Disconnected'}></span>
   </div>
 
@@ -25,7 +24,7 @@
           {#if $isStreaming}
             <span class="cursor">|</span>
           {:else}
-            Awaiting traversal — enter a soul token or select a node to begin.
+            Awaiting traversal — enter a query or select a node to begin.
           {/if}
         </p>
       {/if}

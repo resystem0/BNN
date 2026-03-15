@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.git/
+tests/
+k8s/
+ui/
+docs/
+scripts/
+data/
+.env*
+*.egg-info/
+build/
+dist/
+node_modules/

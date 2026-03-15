@@ -1,0 +1,55 @@
+# ── Stage 1: builder ─────────────────────────────────────────────────────────
+FROM python:3.11-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Install build backend first so hatchling is available for the wheel build
+RUN pip install --no-cache-dir hatchling
+
+# Copy project definition then full source
+COPY pyproject.toml ./
+COPY . .
+
+# Install the package (base deps only — no extras)
+RUN pip install --no-cache-dir .
+
+# ── Stage 2: runtime ─────────────────────────────────────────────────────────
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Bring in installed packages and console scripts from builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Non-root user
+RUN adduser --uid 1000 --disabled-password --gecos "" axon && \
+    mkdir -p /home/axon/.bittensor && chown axon:axon /home/axon/.bittensor
+
+WORKDIR /app
+
+# Copy application source so hatchling src layout resolution works at runtime
+COPY . .
+
+RUN chown -R axon:axon /app
+USER axon
+
+# Bittensor wallet persistence — mount a named volume or host path here
+# App resolves wallet via BT_WALLET_PATH or the default ~/.bittensor
+VOLUME ["/home/axon/.bittensor"]
+
+EXPOSE 8093
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8093/health || exit 1
+
+CMD ["axon-validator"]

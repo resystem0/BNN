@@ -1,4 +1,12 @@
 import { writable, derived } from 'svelte/store';
+import { enterVault as apiEnterVault, hop as apiHop, getSession as apiGetSession } from '$lib/api.js';
+
+// ============================================================
+// Config
+// ============================================================
+
+const BASE = import.meta.env.VITE_GATEWAY_URL || 'http://localhost:8000';
+const WS_BASE = BASE.replace(/^http/, 'ws');
 
 // ============================================================
 // Session State Stores
@@ -6,114 +14,61 @@ import { writable, derived } from 'svelte/store';
 
 export const sessionId = writable(null);
 export const currentNode = writable('quantum_mechanics');
-export const pathHistory = writable([]); // { nodeId, passage, score, minerId, timestamp }
+
+/** Array of { nodeId, passage, timestamp } */
+export const pathHistory = writable([]);
+
+/** Array of { nodeId } mapped from available_next_nodes */
+export const choices = writable([]);
+
 export const isStreaming = writable(false);
 export const streamBuffer = writable('');
-export const choices = writable([]); // { nodeId, label, description }
 export const wsConnected = writable(false);
-export const blockHeight = writable(1847304);
-export const hopsCount = writable(0);
-export const tokensSpent = writable(0);
-export const sessionEarned = writable(0);
-export const validatorCount = writable(12);
-export const activeMiners = writable(47);
+export const isTerminal = writable(false);
+export const lastError = writable(null);
 
 // Soul overlay visibility
-export const showSoulOverlay = writable(false);
+export const showSoulOverlay = writable(true);
 
 // ============================================================
 // Derived State
 // ============================================================
 
-export const sessionStats = derived(
-  [currentNode, hopsCount, tokensSpent, sessionEarned],
-  ([$currentNode, $hopsCount, $tokensSpent, $sessionEarned]) => ({
-    currentNode: $currentNode,
-    hops: $hopsCount,
-    tokensSpent: $tokensSpent,
-    earned: $sessionEarned,
-  })
+/** Number of hops taken — always pathHistory.length - 1 (entry doesn't count as a hop) */
+export const hopCount = derived(pathHistory, ($pathHistory) =>
+  Math.max(0, $pathHistory.length - 1)
 );
+
+// ============================================================
+// Internal WebSocket reference
+// ============================================================
+
+let ws = null;
+
+// ============================================================
+// Helper: map available_next_nodes string[] → choices array
+// ============================================================
+
+function mapChoices(nodes) {
+  if (!Array.isArray(nodes)) return [];
+  return nodes.map((nodeId) => ({ nodeId }));
+}
 
 // ============================================================
 // Actions
 // ============================================================
 
-export function navigate(nodeId) {
-  currentNode.update(() => nodeId);
-  hopsCount.update((n) => n + 1);
-  isStreaming.set(true);
-  streamBuffer.set('');
-
-  // Stub: simulate streaming passage text
-  const passages = [
-    'The lattice of causality folds upon itself at the threshold of observation. Each measurement collapses the wave-form into a singular thread of realized history.',
-    'In the space between knowing and not-knowing, the observer becomes entangled with the observed. The boundary dissolves like mist at dawn.',
-    'Recursion is not mere repetition — it is the universe examining itself through layers of abstraction, each reflection carrying the seed of the next.',
-    'Information propagates through substrate agnostic to matter, binding disparate systems into coherent narrative structures that outlast their physical vessels.',
-  ];
-
-  const text = passages[Math.floor(Math.random() * passages.length)];
-  const words = text.split(' ');
-  let i = 0;
-
-  const interval = setInterval(() => {
-    if (i < words.length) {
-      streamBuffer.update((buf) => (buf ? buf + ' ' + words[i] : words[i]));
-      i++;
-    } else {
-      clearInterval(interval);
-      isStreaming.set(false);
-
-      // Add to path history
-      pathHistory.update((history) => [
-        ...history,
-        {
-          nodeId,
-          passage: text,
-          score: 0.72 + Math.random() * 0.25,
-          minerId: `uid-${Math.floor(Math.random() * 200)}`,
-          timestamp: Date.now(),
-        },
-      ]);
-
-      // Set mock choices
-      choices.set([
-        { nodeId: 'recursion', label: 'Recursion', description: 'Self-referential computational structures' },
-        { nodeId: 'consciousness', label: 'Consciousness', description: 'Emergent subjective experience' },
-        { nodeId: 'information_theory', label: 'Information Theory', description: 'Entropy, encoding, and signal' },
-      ]);
-    }
-  }, 80);
-}
-
-export function submitEntry(token) {
-  if (!token?.trim()) return;
-  showSoulOverlay.set(false);
-  sessionId.set(`axon-${Date.now().toString(36)}`);
-
-  // Stub: initialize session with token
-  streamBuffer.set('');
-  choices.set([
-    { nodeId: 'relativity', label: 'Relativity', description: 'Spacetime curvature and inertial frames' },
-    { nodeId: 'thermodynamics', label: 'Thermodynamics', description: 'Entropy and energy transformation' },
-    { nodeId: 'information_theory', label: 'Information Theory', description: 'Entropy, encoding, and signal' },
-  ]);
-}
-
-// ============================================================
-// WebSocket Connection
-// ============================================================
-
-let ws = null;
-
+/**
+ * Open a WebSocket connection for the given session.
+ * @param {string} sid
+ */
 export function connectWS(sid) {
   if (ws) {
     ws.close();
     ws = null;
   }
 
-  const url = `ws://localhost:8000/ws/${sid}`;
+  const url = `${WS_BASE}/session/${encodeURIComponent(sid)}/live`;
 
   try {
     ws = new WebSocket(url);
@@ -129,42 +84,43 @@ export function connectWS(sid) {
 
     ws.onerror = () => {
       wsConnected.set(false);
+      lastError.set('WebSocket connection error');
     };
 
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
 
-        switch (msg.type) {
-          case 'streaming_token':
-            isStreaming.set(true);
-            streamBuffer.update((buf) => buf + (msg.token || ''));
-            break;
+        if (msg.error) {
+          lastError.set(msg.error);
+          isStreaming.set(false);
+          return;
+        }
 
-          case 'hop_complete':
-            isStreaming.set(false);
-            if (msg.node_id) currentNode.set(msg.node_id);
-            if (msg.score != null) {
-              pathHistory.update((h) => {
-                const last = h[h.length - 1];
-                if (last) return [...h.slice(0, -1), { ...last, score: msg.score }];
-                return h;
-              });
-            }
-            break;
+        if (msg.event === 'hop') {
+          pathHistory.update((h) => [
+            ...h,
+            {
+              nodeId: msg.to_node_id,
+              passage: msg.hop_text ?? '',
+              timestamp: Date.now(),
+            },
+          ]);
+          currentNode.set(msg.to_node_id);
+          choices.set(mapChoices(msg.available_next_nodes));
+          streamBuffer.set(msg.hop_text ?? '');
+          isStreaming.set(false);
+          return;
+        }
 
-          case 'choices':
-            choices.set(msg.choices || []);
-            break;
-
-          case 'block_update':
-            if (msg.block_height != null) blockHeight.set(msg.block_height);
-            if (msg.validator_count != null) validatorCount.set(msg.validator_count);
-            if (msg.active_miners != null) activeMiners.set(msg.active_miners);
-            break;
-
-          default:
-            break;
+        if (msg.event === 'terminal') {
+          isTerminal.set(true);
+          isStreaming.set(false);
+          if (ws) {
+            ws.close();
+            ws = null;
+          }
+          return;
         }
       } catch {
         // ignore malformed messages
@@ -172,12 +128,157 @@ export function connectWS(sid) {
     };
   } catch {
     wsConnected.set(false);
+    lastError.set('Failed to open WebSocket');
   }
 }
 
-export function disconnectWS() {
+/**
+ * Enter the vault — calls POST /enter, seeds session state, then connects WS.
+ * The soul token is used as the query string.
+ * @param {string} query
+ * @param {string} [persona='neutral']
+ */
+export async function enterVault(query, persona = 'neutral') {
+  if (!query?.trim()) return;
+
+  lastError.set(null);
+  isStreaming.set(true);
+  streamBuffer.set('');
+
+  try {
+    const data = await apiEnterVault(query.trim(), persona);
+
+    sessionId.set(data.session_id);
+    currentNode.set(data.entry_node_id);
+    isTerminal.set(false);
+
+    // Seed path history with the entry node
+    pathHistory.set([
+      {
+        nodeId: data.entry_node_id,
+        passage: data.entry_narrative ?? '',
+        timestamp: Date.now(),
+      },
+    ]);
+
+    streamBuffer.set(data.entry_narrative ?? '');
+    choices.set(mapChoices(data.available_next_nodes));
+    isStreaming.set(false);
+
+    showSoulOverlay.set(false);
+
+    connectWS(data.session_id);
+  } catch (err) {
+    isStreaming.set(false);
+    lastError.set(err?.message ?? 'Failed to enter vault');
+  }
+}
+
+/**
+ * Navigate to a node.
+ * Sends over WS if connected; falls back to REST POST /hop.
+ * @param {string} toNodeId
+ */
+export async function navigate(toNodeId) {
+  if (!toNodeId) return;
+
+  isStreaming.set(true);
+  streamBuffer.set('');
+  lastError.set(null);
+
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ to_node_id: toNodeId }));
+    return;
+  }
+
+  // WS fallback — use REST
+  let sid;
+  sessionId.subscribe((v) => { sid = v; })();
+
+  if (!sid) {
+    isStreaming.set(false);
+    lastError.set('No active session');
+    return;
+  }
+
+  try {
+    const data = await apiHop(sid, toNodeId);
+
+    pathHistory.update((h) => [
+      ...h,
+      {
+        nodeId: data.to_node_id,
+        passage: data.hop_text ?? '',
+        timestamp: Date.now(),
+      },
+    ]);
+    currentNode.set(data.to_node_id);
+    choices.set(mapChoices(data.available_next_nodes));
+    streamBuffer.set(data.hop_text ?? '');
+    isStreaming.set(false);
+
+    if (data.is_terminal) {
+      isTerminal.set(true);
+    }
+  } catch (err) {
+    isStreaming.set(false);
+    lastError.set(err?.message ?? 'Hop failed');
+  }
+}
+
+/**
+ * Re-fetch session state from GET /session/{sid} then reconnect WS.
+ * @param {string} sid
+ */
+export async function reconnect(sid) {
+  if (!sid) return;
+
+  lastError.set(null);
+
+  try {
+    const data = await apiGetSession(sid);
+
+    sessionId.set(data.session_id);
+    currentNode.set(data.current_node_id);
+    isTerminal.set(data.is_terminal ?? false);
+
+    // Rebuild path history from path array (no passage text available on reconnect)
+    const rebuilt = (data.path ?? []).map((nodeId) => ({
+      nodeId,
+      passage: '',
+      timestamp: Date.now(),
+    }));
+    pathHistory.set(rebuilt);
+
+    // Show last narrative as the stream buffer
+    streamBuffer.set(data.narrative_so_far ?? '');
+    isStreaming.set(false);
+
+    if (!data.is_terminal) {
+      connectWS(sid);
+    }
+  } catch (err) {
+    lastError.set(err?.message ?? 'Reconnect failed');
+  }
+}
+
+/**
+ * Close the WebSocket and reset all session state.
+ */
+export function disconnect() {
   if (ws) {
     ws.close();
     ws = null;
   }
+
+  sessionId.set(null);
+  currentNode.set('quantum_mechanics');
+  pathHistory.set([]);
+  choices.set([]);
+  isStreaming.set(false);
+  streamBuffer.set('');
+  wsConnected.set(false);
+  isTerminal.set(false);
+  lastError.set(null);
+  showSoulOverlay.set(true);
 }

@@ -1,6 +1,10 @@
 <script>
-  import { choices } from '$lib/stores/session.js';
-  import { navigate } from '$lib/stores/session.js';
+  import { choices, navigate } from '$lib/stores/session.js';
+
+  /** Convert a snake_case node ID to a readable title. */
+  function nodeLabel(nodeId) {
+    return nodeId.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  }
 </script>
 
 {#if $choices.length > 0}
@@ -12,8 +16,8 @@
           class="card"
           on:click={() => navigate(choice.nodeId)}
         >
-          <span class="card-title">{choice.label}</span>
-          <span class="card-desc">{choice.description}</span>
+          <span class="card-title">{nodeLabel(choice.nodeId)}</span>
+          <span class="card-id">{choice.nodeId}</span>
           <span class="card-arrow">→</span>
         </button>
       {/each}
@@ -88,10 +92,11 @@
     grid-row: 1;
   }
 
-  .card-desc {
-    font-family: var(--body-dark);
-    font-size: 11px;
-    font-style: italic;
+  .card-id {
+    font-family: var(--mono-dark);
+    font-size: 9px;
+    font-weight: 400;
+    letter-spacing: 0.05em;
     color: var(--text-dim);
     grid-column: 1;
     grid-row: 2;
