@@ -364,3 +364,38 @@ class SubnetConfig:
     MAX_PROPOSAL_ADJACENCY: int  = PROPOSAL_MAX_EDGES
     VOTING_WINDOW_BLOCKS: int   = PROPOSAL_VOTE_PERIOD_BLOCKS
     BOND_ESCROW_ADDRESS:  str   = _env("BOND_ESCROW_ADDRESS", "")
+
+    # ── Emission pools ───────────────────────────────────────────────────
+    # Traversal pool: balance between retrieval quality and actual usage
+    TRAVERSAL_USAGE_WEIGHT: float = 0.5
+    # Quality pool sub-weights (must sum to 1.0)
+    QUALITY_COHERENCE_WEIGHT:  float = 0.5
+    QUALITY_WORDCOUNT_WEIGHT:  float = 0.3
+    QUALITY_FINISH_WEIGHT:     float = 0.2
+    # Topology pool
+    TOPOLOGY_BETWEENNESS_WEIGHT: float = 0.6
+    TOPOLOGY_SOFTMAX_TEMP:       float = 1.0
+
+    # ── Metagraph watcher ────────────────────────────────────────────────
+    METAGRAPH_SYNC_INTERVAL_S: float = _env("METAGRAPH_SYNC_INTERVAL_S", 60.0)
+
+    # ── Voting ───────────────────────────────────────────────────────────
+    MIN_VALIDATOR_STAKE_TO_VOTE: float = _env("MIN_VALIDATOR_STAKE_TO_VOTE", 1000.0)
+    VOTE_QUORUM_PARTICIPATION:   float = PROPOSAL_QUORUM_FRACTION
+    VOTE_APPROVAL_THRESHOLD:     float = PROPOSAL_PASS_THRESHOLD
+
+    # ── Node integration ─────────────────────────────────────────────────
+    FORESHADOW_OFFSET_BLOCKS:    int   = 360    # ~1 hour before bridge open
+    BRIDGE_OPEN_OFFSET_BLOCKS:   int   = 720    # ~2 hours after acceptance
+    EDGE_RAMP_BLOCKS:            int   = 3600   # ~12 hours to ramp to 1.0
+    INTEGRATION_MIN_EDGE_WEIGHT: float = EDGE_VISIBILITY_THRESHOLD
+
+    # ── Pruning ──────────────────────────────────────────────────────────
+    PRUNE_SCORE_WINDOW:          int   = 20     # rolling window size in epochs
+    PRUNE_MEAN_THRESHOLD:        float = PRUNING_THRESHOLD
+    PRUNE_CONSECUTIVE_THRESHOLD: float = 0.25   # per-epoch threshold for streak
+    PRUNE_CONSECUTIVE_EPOCHS:    int   = 5      # streak length to trigger warning
+    PRUNE_RECOVERY_THRESHOLD:    float = 0.50
+    PRUNE_WARNING_EPOCHS:        int   = 5      # epochs in warning before decay
+    PRUNE_DECAY_EPOCHS:          int   = 10     # epochs to decay before collapse
+    PRUNE_AGGRESSIVE_DECAY_RATE: float = EDGE_WARNING_DECAY_DELTA

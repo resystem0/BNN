@@ -291,6 +291,13 @@ class GraphStore:
 
     # ── edge operations ──────────────────────────────────────────────
 
+    def get_edge(self, src: str, dst: str) -> Optional[Edge]:
+        return self._mem.get_edge(src, dst)
+
+    def update_weight(self, src: str, dst: str, delta: float) -> None:
+        self._mem.update_weight(src, dst, delta)
+        self._betweenness_stale = True
+
     def add_edge(self, src: str, dst: str, weight: float = 1.0) -> None:
         self._mem.add_edge(src, dst, weight)
         self._betweenness_stale = True
