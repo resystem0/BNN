@@ -425,6 +425,27 @@ def _word_positions(text: str) -> list[tuple[str, int, int]]:
     return positions
 
 
+def merkle_root(chunk_hashes: list[str]) -> str:
+    """
+    Compute the Merkle root of a list of hex SHA-256 chunk hashes.
+    Convenience wrapper used by scripts/register_miner.py.
+    """
+    if not chunk_hashes:
+        return _sha256("")
+    level = list(chunk_hashes)
+    if len(level) % 2 == 1:
+        level.append(level[-1])
+    while len(level) > 1:
+        next_level = [
+            _sha256(level[i] + level[i + 1])
+            for i in range(0, len(level), 2)
+        ]
+        if len(next_level) % 2 == 1 and len(next_level) > 1:
+            next_level.append(next_level[-1])
+        level = next_level
+    return level[0]
+
+
 def compute_corpus_root_hash(corpus_dir: Path) -> str:
     """
     Standalone helper used by scripts/register_miner.py to compute the

@@ -1,0 +1,182 @@
+version: "3.9"
+
+# ---------------------------------------------------------------------------
+# axon-graph local dev stack
+#
+# Services:
+#   redis       — session store for narrative miners
+#   kuzu        — graph database (file-mounted, no daemon needed; stub here)
+#   ipfs        — IPFS node for corpus manifest pinning
+#   subtensor   — local Bittensor chain (btcli localnet)
+#   chroma      — ChromaDB vector store for domain miners
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.dev.yml logs -f
+#   docker compose -f docker-compose.dev.yml down -v   # wipe volumes
+#
+# After stack is up, run:
+#   python scripts/seed_graph.py
+#   python scripts/register_miner.py --node-id <id>
+# ---------------------------------------------------------------------------
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+networks:
+  axon-dev:
+    driver: bridge
+
+volumes:
+  redis-data:
+  ipfs-data:
+  ipfs-staging:
+  chroma-data:
+  subtensor-data:
+  kuzu-data:
+
+services:
+
+  # ── Redis ──────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: axon-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: >
+      redis-server
+      --save 60 1
+      --loglevel warning
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    networks:
+      - axon-dev
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    logging: *default-logging
+
+  # ── ChromaDB ───────────────────────────────────────────────────────────
+  chroma:
+    image: chromadb/chroma:0.5.0
+    container_name: axon-chroma
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma-data:/chroma/chroma
+    environment:
+      - CHROMA_SERVER_AUTH_CREDENTIALS_FILE=""
+      - ANONYMIZED_TELEMETRY=false
+      - ALLOW_RESET=true
+    networks:
+      - axon-dev
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  # ── IPFS ───────────────────────────────────────────────────────────────
+  ipfs:
+    image: ipfs/kubo:v0.28.0
+    container_name: axon-ipfs
+    restart: unless-stopped
+    ports:
+      - "4001:4001"       # swarm
+      - "5001:5001"       # API
+      - "8080:8080"       # gateway
+    volumes:
+      - ipfs-staging:/export
+      - ipfs-data:/data/ipfs
+    environment:
+      - IPFS_PROFILE=server
+    networks:
+      - axon-dev
+    healthcheck:
+      test: ["CMD", "ipfs", "id"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    logging: *default-logging
+
+  # ── Subtensor (local chain) ────────────────────────────────────────────
+  # Runs a single-node Bittensor localnet.
+  # Alice and Bob validator keys are pre-funded by default.
+  subtensor:
+    image: opentensor/subtensor:latest
+    container_name: axon-subtensor
+    restart: unless-stopped
+    ports:
+      - "9944:9944"       # WebSocket RPC
+      - "9933:9933"       # HTTP RPC
+      - "30333:30333"     # P2P
+    volumes:
+      - subtensor-data:/tmp/blockchain
+    command: >
+      --dev
+      --rpc-external
+      --ws-external
+      --rpc-cors all
+      --base-path /tmp/blockchain
+    networks:
+      - axon-dev
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9933"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    logging: *default-logging
+
+  # ── KùzuDB volume initialiser ──────────────────────────────────────────
+  # KùzuDB is an embedded database (no server process).
+  # This one-shot container just ensures the volume exists and is writable.
+  kuzu-init:
+    image: busybox:1.36
+    container_name: axon-kuzu-init
+    volumes:
+      - kuzu-data:/kuzu
+    command: sh -c "mkdir -p /kuzu && chmod 777 /kuzu && echo 'kuzu volume ready'"
+    networks:
+      - axon-dev
+    restart: "no"
+
+  # ── Adminer (optional DB inspection UI) ───────────────────────────────
+  adminer:
+    image: adminer:4.8.1
+    container_name: axon-adminer
+    restart: unless-stopped
+    ports:
+      - "8088:8080"
+    networks:
+      - axon-dev
+    profiles:
+      - tools
+    logging: *default-logging
+
+  # ── Redis Commander (optional Redis UI) ───────────────────────────────
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: axon-redis-commander
+    restart: unless-stopped
+    ports:
+      - "8089:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    networks:
+      - axon-dev
+    depends_on:
+      redis:
+        condition: service_healthy
+    profiles:
+      - tools
+    logging: *default-logging

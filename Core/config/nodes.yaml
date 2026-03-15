@@ -1,0 +1,303 @@
+# config/nodes.yaml
+# ---------------------------------------------------------------------------
+# axon-graph node registry
+#
+# Each entry defines one knowledge-graph node and its associated miner.
+# Fields:
+#   id          : canonical node identifier (used in KnowledgeQuery / NarrativeHop)
+#   domain      : knowledge domain tag (used for corpus routing)
+#   persona     : default narrative persona for hops departing this node
+#   description : human-readable summary (not sent on-chain)
+#   adjacency   : list of node ids this node has outgoing edges to
+#   miner:
+#     type      : "domain" | "narrative" | "both"
+#     hotkey    : ss58 address of the registered miner (fill in after registration)
+#     axon_ip   : miner's public IP (fill in after deployment)
+#     axon_port : miner's axon port
+#
+# Adjacency is directional. To make an edge bidirectional add it on both sides.
+# Edge weights are initialised to 1.0 by scripts/seed_graph.py and evolve
+# over time via traversal feedback.
+# ---------------------------------------------------------------------------
+
+nodes:
+
+  # ── Science cluster ──────────────────────────────────────────────────
+
+  - id: quantum_mechanics
+    domain: physics
+    persona: scholar
+    description: >
+      Foundations of quantum theory: wave functions, superposition,
+      measurement, entanglement, and the Copenhagen interpretation.
+    adjacency:
+      - particle_physics
+      - condensed_matter
+      - quantum_computing
+    miner:
+      type: domain
+      hotkey: ""
+      axon_ip: "127.0.0.1"
+      axon_port: 8091
+
+  - id: particle_physics
+    domain: physics
+    persona: scholar
+    description: >
+      The Standard Model, quarks, leptons, bosons, collider experiments,
+      and the search for physics beyond the Standard Model.
+    adjacency:
+      - quantum_mechanics
+      - cosmology
+      - nuclear_physics
+    miner:
+      type: domain
+      hotkey: ""
+      axon_ip: "127.0.0.1"
+      axon_port: 8092
+
+  - id: condensed_matter
+    domain: physics
+    persona: scholar
+    description: >
+      Solid-state physics, superconductivity, topological materials,
+      phase transitions, and emergent phenomena.
+    adjacency:
+      - quantum_mechanics
+      - materials_science
+    miner:
+      type: domain
+      hotkey: ""
+      axon_ip: "127.0.0.1"
+      axon_port: 8093
+
+  - id: quantum_computing
+    domain: computer_science
+    persona: explorer
+    description: >
+      Qubits, quantum gates, error correction, near-term NISQ algorithms,
+      and the race toward fault-tolerant quantum advantage.
+    adjacency:
+      - quantum_mechanics
+      - cryptography
+      - machine_learning
+    miner:
+      type: domain
+      hotkey: ""
+      axon_ip: "127.0.0.1"
+      axon_port: 8094
+
+  - id: cosmology
+    domain: astronomy
+    persona: storyteller
+    description: >
+      The Big Bang, cosmic inflation, dark matter, dark energy, large-scale
+      structure, and the ultimate fate of the universe.
+    adjacency:
+      - particle_physics
+      - general_relativity
+      - astrobiology
+    miner:
+      type: domain
+      hotkey: ""
+      axon_ip: "127.0.0.1"
+      axon_port: 8095
+
+  - id: general_relativity
+    domain: physics
+    persona: scholar
+    description: >
+      Einstein's field equations, spacetime curvature, black holes,
+      gravitational waves, and tests of GR.
+    adjacency:
+      - cosmology
+      - quantum_mechanics
+    miner:
+      type: domain
+      hotkey: ""
+      axon_ip: "127.0.0.1"
+      axon_port: 8096
+
+  # ── Technology cluster ───────────────────────────────────────────────
+
+  - id: machine_learning
+    domain: computer_science
+    persona: explorer
+    description: >
+      Supervised, unsupervised, and reinforcement learning; neural network
+      architectures; training dynamics; and modern foundation models.
+    adjacency:
+      - quantum_computing
+      - neuroscience
+      - statistics
+      - cryptography
+    miner:
+      type: domain
+      hotkey: ""
+      axon_ip: "127.0.0.1"
+      axon_port: 8097
+
+  - id: cryptography
+    domain: computer_science
+    persona: journalist
+    description: >
+      Symmetric and asymmetric encryption, hash functions, zero-knowledge
+      proofs, post-quantum cryptography, and blockchain primitives.
+    adjacency:
+      - quantum_computing
+      - machine_learning
+      - game_theory
+    miner:
+      type: domain
+      hotkey: ""
+      axon_ip: "127.0.0.1"
+      axon_port: 8098
+
+  - id: materials_science
+    domain: chemistry
+    persona: scholar
+    description: >
+      Structure-property relationships in metals, ceramics, polymers,
+      and composites; nanomaterials; and advanced manufacturing.
+    adjacency:
+      - condensed_matter
+      - chemistry
+      - biology
+    miner:
+      type: domain
+      hotkey: ""
+      axon_ip: "127.0.0.1"
+      axon_port: 8099
+
+  # ── Life sciences cluster ────────────────────────────────────────────
+
+  - id: neuroscience
+    domain: biology
+    persona: storyteller
+    description: >
+      Neural circuits, synaptic plasticity, cognitive neuroscience,
+      consciousness theories, and brain-computer interfaces.
+    adjacency:
+      - machine_learning
+      - biology
+      - philosophy_of_mind
+    miner:
+      type: domain
+      hotkey: ""
+      axon_ip: "127.0.0.1"
+      axon_port: 8100
+
+  - id: biology
+    domain: biology
+    persona: neutral
+    description: >
+      Cell biology, genetics, evolution, ecology, and the molecular
+      basis of life.
+    adjacency:
+      - neuroscience
+      - materials_science
+      - astrobiology
+      - chemistry
+    miner:
+      type: domain
+      hotkey: ""
+      axon_ip: "127.0.0.1"
+      axon_port: 8101
+
+  - id: astrobiology
+    domain: astronomy
+    persona: explorer
+    description: >
+      The origin of life, habitability conditions, extremophiles,
+      biosignatures, and the search for extraterrestrial life.
+    adjacency:
+      - cosmology
+      - biology
+      - chemistry
+    miner:
+      type: domain
+      hotkey: ""
+      axon_ip: "127.0.0.1"
+      axon_port: 8102
+
+  - id: chemistry
+    domain: chemistry
+    persona: scholar
+    description: >
+      Chemical bonding, reaction mechanisms, thermodynamics, catalysis,
+      and the periodic table as a unifying framework.
+    adjacency:
+      - biology
+      - materials_science
+      - astrobiology
+      - nuclear_physics
+    miner:
+      type: domain
+      hotkey: ""
+      axon_ip: "127.0.0.1"
+      axon_port: 8103
+
+  # ── Foundations cluster ──────────────────────────────────────────────
+
+  - id: statistics
+    domain: mathematics
+    persona: neutral
+    description: >
+      Probability theory, Bayesian inference, frequentist methods,
+      causal inference, and information theory.
+    adjacency:
+      - machine_learning
+      - game_theory
+      - philosophy_of_mind
+    miner:
+      type: domain
+      hotkey: ""
+      axon_ip: "127.0.0.1"
+      axon_port: 8104
+
+  - id: game_theory
+    domain: mathematics
+    persona: journalist
+    description: >
+      Nash equilibria, mechanism design, evolutionary game theory,
+      auction theory, and applications to economics and AI.
+    adjacency:
+      - statistics
+      - cryptography
+      - philosophy_of_mind
+    miner:
+      type: domain
+      hotkey: ""
+      axon_ip: "127.0.0.1"
+      axon_port: 8105
+
+  - id: philosophy_of_mind
+    domain: philosophy
+    persona: storyteller
+    description: >
+      Consciousness, qualia, the hard problem, functionalism, physicalism,
+      and the relationship between mind and computation.
+    adjacency:
+      - neuroscience
+      - statistics
+      - game_theory
+    miner:
+      type: domain
+      hotkey: ""
+      axon_ip: "127.0.0.1"
+      axon_port: 8106
+
+  - id: nuclear_physics
+    domain: physics
+    persona: scholar
+    description: >
+      Nuclear structure, radioactive decay, fission, fusion, and
+      applications from energy to medical imaging.
+    adjacency:
+      - particle_physics
+      - chemistry
+    miner:
+      type: domain
+      hotkey: ""
+      axon_ip: "127.0.0.1"
+      axon_port: 8107
