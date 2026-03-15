@@ -1,0 +1,178 @@
+/* ============================================================
+   AXON GRAPH — Global Styles
+   ============================================================ */
+
+/* --- Dark Game Theme --- */
+:root {
+  --void: #060810;
+  --surface: #0d1120;
+  --surface2: #131929;
+  --border: rgba(79, 123, 255, 0.15);
+  --border-strong: rgba(79, 123, 255, 0.3);
+  --gold: #e8c87a;
+  --gold-dim: rgba(232, 200, 122, 0.6);
+  --accent: #4f7bff;
+  --accent2: #00e5b0;
+  --accent-glow: rgba(79, 123, 255, 0.25);
+  --text: rgba(220, 215, 205, 0.9);
+  --text-dim: rgba(220, 215, 205, 0.5);
+  --serif-dark: 'Cinzel', serif;
+  --body-dark: 'Crimson Pro', serif;
+  --mono-dark: 'JetBrains Mono', monospace;
+}
+
+/* --- Light Vellum Theme --- */
+.theme-light {
+  --ink: #1a1710;
+  --vellum: #f5f0e8;
+  --vellum2: #ede7d9;
+  --vellum3: #e2dace;
+  --rule: rgba(26, 23, 16, 0.1);
+  --rule-strong: rgba(26, 23, 16, 0.22);
+  --teal: #1a7a6e;
+  --teal-light: #c8e8e4;
+  --amber: #b86a00;
+  --amber-light: #faebd0;
+  --red: #8b2020;
+  --red-light: #f5d5d5;
+  --purple: #4a3580;
+  --purple-light: #e4dff5;
+  --muted: #7a7060;
+  --serif: 'Libre Baskerville', Georgia, serif;
+  --mono: 'JetBrains Mono', 'Courier New', monospace;
+}
+
+/* --- Global Reset --- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font: inherit;
+}
+
+input,
+textarea {
+  font: inherit;
+  border: none;
+  outline: none;
+  background: none;
+}
+
+svg {
+  display: block;
+}
+
+/* --- Shared Utility Classes --- */
+
+/* Dark theme utilities */
+.mono { font-family: var(--mono-dark); }
+.serif-d { font-family: var(--serif-dark); }
+.body-d { font-family: var(--body-dark); }
+
+/* Light theme utilities */
+.serif-l { font-family: var(--serif); }
+.mono-l { font-family: var(--mono); }
+
+/* Score colors (light theme) */
+.score-teal { color: var(--teal); }
+.score-amber { color: var(--amber); }
+.score-red { color: var(--red); }
+
+/* Chip / tag pill */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-family: var(--mono-dark);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  border-radius: 2px;
+  text-transform: uppercase;
+}
+
+/* Section heading with rule */
+.section-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.section-heading::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+
+/* Dark section heading variant */
+.section-heading-dark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono-dark);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+
+.section-heading-dark::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
