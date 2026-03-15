@@ -1,0 +1,145 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "axon-graph"
+version = "0.1.0"
+description = "Knowledge-graph narrative traversal subnet on Bittensor"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+
+authors = [
+  { name = "axon-graph contributors" },
+]
+
+keywords = ["bittensor", "subnet", "knowledge-graph", "rag", "llm", "narrative"]
+
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+  # ── Bittensor core ────────────────────────────────────────────────
+  "bittensor>=7.3.0,<8.0.0",
+
+  # ── API / serving ─────────────────────────────────────────────────
+  "fastapi>=0.110.1",
+  "uvicorn[standard]>=0.29.0",
+  "websockets>=12.0",
+
+  # ── Vector store ──────────────────────────────────────────────────
+  "chromadb>=0.5.0",
+
+  # ── LLM inference client (vLLM exposes OpenAI-compatible API) ─────
+  "openai>=1.30.0",
+
+  # ── Embeddings ────────────────────────────────────────────────────
+  "sentence-transformers>=3.0.0",
+
+  # ── Graph database ────────────────────────────────────────────────
+  "kuzu>=0.4.0",
+
+  # ── Session / cache store ─────────────────────────────────────────
+  "redis[hiredis]>=5.0.0",
+
+  # ── HTTP client (IPFS pinning, manifest fetch) ────────────────────
+  "httpx>=0.27.0",
+
+  # ── Data validation ───────────────────────────────────────────────
+  "pydantic>=2.7.0",
+  "pydantic-settings>=2.3.0",
+
+  # ── Numerics ──────────────────────────────────────────────────────
+  "numpy>=1.26.0",
+
+  # ── Structured logging ────────────────────────────────────────────
+  "structlog>=24.1.0",
+
+  # ── YAML config parsing ───────────────────────────────────────────
+  "pyyaml>=6.0.1",
+]
+
+[project.optional-dependencies]
+vllm = [
+  # Install separately on GPU hosts; not pulled in by default because
+  # vLLM requires CUDA and has a heavy dependency tree.
+  "vllm>=0.4.0",
+  "torch>=2.3.0",
+]
+
+dev = [
+  "pytest>=8.2.0",
+  "pytest-asyncio>=0.23.0",
+  "pytest-mock>=3.14.0",
+  "httpx>=0.27.0",           # AsyncClient for FastAPI tests
+  "ruff>=0.4.0",
+  "mypy>=1.10.0",
+  "pre-commit>=3.7.0",
+  "ipython>=8.24.0",
+]
+
+docs = [
+  "mkdocs-material>=9.5.0",
+  "mkdocstrings[python]>=0.25.0",
+]
+
+[project.scripts]
+axon-validator    = "subnet.validator:main"
+axon-domain-miner = "miners.domain.miner:main"
+axon-narrative-miner = "miners.narrative.miner:main"
+axon-gateway      = "orchestrator.gateway:main"
+
+[project.urls]
+Homepage   = "https://github.com/axon-graph/axon-graph"
+Repository = "https://github.com/axon-graph/axon-graph"
+Issues     = "https://github.com/axon-graph/axon-graph/issues"
+
+# ---------------------------------------------------------------------------
+# Tool config
+# ---------------------------------------------------------------------------
+
+[tool.hatch.build.targets.wheel]
+packages = [
+  "subnet",
+  "miners",
+  "orchestrator",
+  "evolution",
+  "config",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "TCH"]
+ignore = ["E501", "B008"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["subnet", "miners", "orchestrator", "evolution", "config"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = false
+ignore_missing_imports = true
+exclude = ["nomad/", "scripts/"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = [
+  "ignore::DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["subnet", "miners", "orchestrator", "evolution"]
+omit = ["tests/*", "scripts/*"]

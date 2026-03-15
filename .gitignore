@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Environment
+.env
+*.env
+
+# Embedding caches
+.embedding_cache.pkl
+*.npy
+
+# KùzuDB
+*.kuzu/
+kuzu_data/
+
+# Bittensor wallets (never commit)
+~/.bittensor/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Tests / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Docs
+site/
