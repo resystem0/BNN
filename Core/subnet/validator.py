@@ -8,6 +8,7 @@ Responsibilities:
   • Issue corpus-integrity challenges (Merkle proof verification)
   • Aggregate traversal / quality / topology sub-scores
   • Broadcast WeightCommit to peer validators then call set_weights
+  • Drive evolution hooks: voting tally, node integration ramp, pruning, drift detection
 """
 
 from __future__ import annotations
@@ -25,6 +26,12 @@ import numpy as np
 from config.subnet_config import SubnetConfig
 from subnet.graph_store import GraphStore
 from subnet.protocol import KnowledgeQuery, NarrativeHop, WeightCommit
+from subnet.drift_detector import DriftDetector
+from evolution.proposal import NodeProposal, ProposalStatus
+from evolution.voting import VotingEngine, VoteChoice
+from evolution.integration import IntegrationManager
+from evolution.pruning import PruningEngine, EpochScore
+from config.logging import EpochLogger, set_epoch
 
 
 # ---------------------------------------------------------------------------
@@ -382,6 +389,12 @@ class Validator:
         graph_store: GraphStore,
         embedder,
         cfg: Optional[SubnetConfig] = None,
+        # Evolution hooks — all optional; omit for scoring-only mode
+        voting_engine: Optional["VotingEngine"] = None,
+        integration_manager: Optional["IntegrationManager"] = None,
+        pruning_engine: Optional["PruningEngine"] = None,
+        proposals: Optional[Dict[str, "NodeProposal"]] = None,
+        escrow_wallet: Optional[bt.wallet] = None,
     ):
         self.wallet = wallet
         self.subtensor = subtensor
@@ -393,6 +406,21 @@ class Validator:
             self.cfg, graph_store, metagraph, self.dendrite, embedder
         )
         self._epoch: int = 0
+        self._log = EpochLogger("validator")
+
+        # Evolution subsystems (all None-safe)
+        self.voting_engine       = voting_engine
+        self.integration_manager = integration_manager
+        self.pruning_engine      = pruning_engine
+        self._proposals: Dict[str, Any] = proposals or {}
+        self.escrow_wallet       = escrow_wallet or wallet
+
+        # Drift detector — always active
+        self.drift_detector = DriftDetector(embedder, self.cfg)
+        for node_id in graph_store.all_node_ids():
+            node = graph_store.get_node(node_id)
+            if node:
+                self.drift_detector.register_node(node_id, node.domain)
 
     # ── weight commit broadcast ──────────────────────────────────────────
 
@@ -463,9 +491,99 @@ class Validator:
 
     # ── epoch runner ─────────────────────────────────────────────────────
 
+    # ── evolution hooks ──────────────────────────────────────────────────
+
+    def _run_voting(self) -> None:
+        """Tally + finalise all active proposals."""
+        if self.voting_engine is None or not self._proposals:
+            return
+        current_block = self.subtensor.get_current_block()
+        active = [p for p in self._proposals.values() if p.is_active]
+        results = self.voting_engine.process_epoch(active, current_block)
+        for proposal, result in results:
+            self._log.info(
+                "voting_tally",
+                proposal_id=proposal.proposal_id,
+                outcome=str(result.outcome),
+                approval=round(result.approval_ratio, 3),
+                participation=round(result.participation_ratio, 3),
+            )
+            # Enqueue accepted proposals for integration
+            if (
+                result.outcome == ProposalStatus.ACCEPTED
+                and self.integration_manager is not None
+                and proposal.status == ProposalStatus.ACCEPTED
+            ):
+                self.integration_manager.enqueue(proposal, current_block)
+
+    def _run_integration(self) -> None:
+        """Drive edge-ramp and go-live transitions."""
+        if self.integration_manager is None:
+            return
+        current_block = self.subtensor.get_current_block()
+        went_live = self.integration_manager.process_epoch(
+            self._proposals, current_block
+        )
+        for state in went_live:
+            self._log.info("node_went_live", node_id=state.node_id, epoch=self._epoch)
+
+    def _run_pruning(self, scores: Dict[int, float]) -> None:
+        """Push epoch scores into pruning engine and process transitions."""
+        if self.pruning_engine is None:
+            return
+        uid_to_node = {
+            uid: self.graph_store.uid_to_node(uid) or ""
+            for uid in scores
+        }
+        epoch_scores = [
+            EpochScore(
+                epoch=self._epoch,
+                uid=uid,
+                node_id=uid_to_node.get(uid, ""),
+                final_weight=w,
+                traversal_pool=0.0,
+                quality_pool=0.0,
+                topology_pool=0.0,
+            )
+            for uid, w in scores.items()
+        ]
+        self.pruning_engine.push_scores(epoch_scores)
+        collapsed = self.pruning_engine.process_epoch(self._epoch)
+        for state in collapsed:
+            self._log.warning(
+                "node_collapsed",
+                uid=state.uid,
+                node_id=state.node_id,
+                epoch=self._epoch,
+            )
+        warned = self.pruning_engine.warned_uids()
+        if warned:
+            self._log.info("pruning_warned_uids", uids=warned, epoch=self._epoch)
+
+    def _run_drift_detection(self) -> None:
+        """Evaluate drift windows and log any newly flagged miners."""
+        flagged = self.drift_detector.evaluate_epoch(self._epoch)
+        for uid, obs in flagged:
+            self._log.warning(
+                "drift_detected",
+                uid=uid,
+                node_id=obs.node_id,
+                domain=obs.domain,
+                cosine=round(obs.mean_cosine_to_centroid, 4),
+                epoch=self._epoch,
+            )
+        stats = self.drift_detector.stats()
+        if stats["flagged_uids"]:
+            self._log.info("drift_stats", **stats, epoch=self._epoch)
+
+    # ── epoch runner ─────────────────────────────────────────────────────
+
     async def run_epoch(self) -> None:
         self._epoch += 1
+        set_epoch(self._epoch)
         self.metagraph.sync(subtensor=self.subtensor)
+
+        self._log.info("epoch_start", epoch=self._epoch)
 
         scores = await self.scoring_loop.run_epoch(self._epoch)
 
@@ -482,6 +600,19 @@ class Validator:
             )
 
         self.graph_store.decay_edges(self.cfg.EDGE_DECAY_RATE)
+
+        # ── Evolution hooks (run after weights are set) ───────────────
+        self._run_voting()
+        self._run_integration()
+        self._run_pruning(scores)
+        self._run_drift_detection()
+
+        self._log.info(
+            "epoch_complete",
+            epoch=self._epoch,
+            scored_uids=len(scores),
+            drift_flagged=len(self.drift_detector.flagged_uids()),
+        )
 
     async def run_forever(self) -> None:
         """Drive the validator epoch loop indefinitely."""

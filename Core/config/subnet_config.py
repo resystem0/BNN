@@ -365,6 +365,16 @@ class SubnetConfig:
     VOTING_WINDOW_BLOCKS: int   = PROPOSAL_VOTE_PERIOD_BLOCKS
     BOND_ESCROW_ADDRESS:  str   = _env("BOND_ESCROW_ADDRESS", "")
 
+    # ── Drift detection ─────────────────────────────────────────────────
+    DRIFT_THRESHOLD:          float = DRIFT_THRESHOLD
+    DRIFT_WINDOW_EPOCHS:      int   = 10    # rolling window for drift detection
+    DRIFT_BASELINE_EPOCHS:    int   = 3     # epochs to establish baseline cosine
+    DRIFT_CONSECUTIVE_EPOCHS: int   = 3     # consecutive below-threshold epochs to flag
+    DRIFT_DROP_THRESHOLD:     float = 0.28  # hard cosine drop from baseline to flag
+
+    # ── Validator challenges ─────────────────────────────────────────────
+    CHALLENGE_MAX_TOKENS: int = _env("CHALLENGE_MAX_TOKENS", 200)
+
     # ── Emission pools ───────────────────────────────────────────────────
     # Traversal pool: balance between retrieval quality and actual usage
     TRAVERSAL_USAGE_WEIGHT: float = 0.5
