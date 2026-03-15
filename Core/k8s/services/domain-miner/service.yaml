@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: domain-miner
+  namespace: axon-graph
+  labels:
+    app: domain-miner
+    app.kubernetes.io/part-of: axon-graph
+spec:
+  type: ClusterIP
+  selector:
+    app: domain-miner
+  ports:
+    - name: axon
+      port: 8091
+      targetPort: 8091
+      protocol: TCP

@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-config
+  namespace: axon-graph
+  labels:
+    app: grafana
+    app.kubernetes.io/part-of: axon-graph
+data:
+  # ---------------------------------------------------------------------------
+  # grafana.ini — Grafana server configuration
+  # ---------------------------------------------------------------------------
+  grafana.ini: |
+    [server]
+    protocol = http
+    http_port = 3000
+    root_url = %(protocol)s://%(domain)s:%(http_port)s/
+
+    [database]
+    type = sqlite3
+    path = /var/lib/grafana/grafana.db
+
+    [session]
+    provider = file
+
+    [analytics]
+    reporting_enabled = false
+    check_for_updates = false
+
+    [security]
+    # Set admin_password via the GRAFANA_ADMIN_PASSWORD env var (Secret)
+    admin_user = admin
+    disable_gravatar = true
+    cookie_secure = true
+    cookie_samesite = lax
+
+    [users]
+    allow_sign_up = false
+    auto_assign_org = true
+    auto_assign_org_role = Viewer
+
+    [auth.anonymous]
+    enabled = false
+
+    [log]
+    mode = console
+    level = info
+
+    [alerting]
+    enabled = true
+
+    [unified_alerting]
+    enabled = false
+
+    [feature_toggles]
+    publicDashboards = false
+
+  # ---------------------------------------------------------------------------
+  # datasources.yaml — Prometheus datasource auto-provisioning
+  # ---------------------------------------------------------------------------
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        uid: axon-prometheus
+        url: http://prometheus.axon-graph.svc.cluster.local:9090
+        isDefault: true
+        jsonData:
+          timeInterval: "15s"
+          httpMethod: POST
+          exemplarTraceIdDestinations: []
+        editable: false
+
+  # ---------------------------------------------------------------------------
+  # dashboards.yaml — Dashboard provider configuration
+  # Dashboards placed in /var/lib/grafana/dashboards are auto-imported.
+  # ---------------------------------------------------------------------------
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: axon-graph
+        orgId: 1
+        folder: "axon-graph"
+        folderUid: axon-graph
+        type: file
+        disableDeletion: true
+        updateIntervalSeconds: 30
+        allowUiUpdates: false
+        options:
+          path: /var/lib/grafana/dashboards

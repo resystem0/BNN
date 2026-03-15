@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kuzu
+  namespace: axon-graph
+  labels:
+    app: kuzu
+    app.kubernetes.io/part-of: axon-graph
+spec:
+  type: ClusterIP
+  selector:
+    app: kuzu
+  ports:
+    - name: http
+      port: 8888
+      targetPort: 8888
+      protocol: TCP

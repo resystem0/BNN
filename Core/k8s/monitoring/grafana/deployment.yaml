@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: axon-graph
+  labels:
+    app: grafana
+    app.kubernetes.io/part-of: axon-graph
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  strategy:
+    # Recreate to avoid concurrent SQLite access from two Grafana instances
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: grafana
+        app.kubernetes.io/part-of: axon-graph
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsUser: 472
+        runAsGroup: 472
+        fsGroup: 472
+      containers:
+        - name: grafana
+          image: grafana/grafana:10.4.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: GF_PATHS_CONFIG
+              value: /etc/grafana/grafana.ini
+            - name: GF_PATHS_PROVISIONING
+              value: /etc/grafana/provisioning
+            # Admin password from Secret — never hardcode credentials
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: axon-secrets
+                  key: AXON_JWT_SECRET
+                  # Replace with a dedicated grafana-admin-password Secret key
+                  # in production. Using AXON_JWT_SECRET here as a placeholder.
+                  optional: true
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: grafana-config
+              mountPath: /etc/grafana/grafana.ini
+              subPath: grafana.ini
+            - name: grafana-datasources
+              mountPath: /etc/grafana/provisioning/datasources/datasources.yaml
+              subPath: datasources.yaml
+            - name: grafana-dashboards-provider
+              mountPath: /etc/grafana/provisioning/dashboards/dashboards.yaml
+              subPath: dashboards.yaml
+            - name: grafana-data
+              mountPath: /var/lib/grafana
+      volumes:
+        - name: grafana-config
+          configMap:
+            name: grafana-config
+            items:
+              - key: grafana.ini
+                path: grafana.ini
+        - name: grafana-datasources
+          configMap:
+            name: grafana-config
+            items:
+              - key: datasources.yaml
+                path: datasources.yaml
+        - name: grafana-dashboards-provider
+          configMap:
+            name: grafana-config
+            items:
+              - key: dashboards.yaml
+                path: dashboards.yaml
+        - name: grafana-data
+          emptyDir: {}
+          # Production: persist dashboards and alert state with a PVC:
+          # persistentVolumeClaim:
+          #   claimName: grafana-data

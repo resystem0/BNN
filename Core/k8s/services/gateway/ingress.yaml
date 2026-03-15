@@ -1,0 +1,116 @@
+# Traefik IngressRoute CRD — requires Traefik v2 / v3 installed in the cluster.
+# cert-manager ClusterIssuer "letsencrypt-prod" must exist before applying.
+#
+# Rate limiting: 100 requests per minute per source IP (token bucket, burst=50).
+# WebSocket connections (/ws/*) are long-lived; the rate limit applies to the
+# initial HTTP upgrade request, not to individual frames.
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: axon-ratelimit
+  namespace: axon-graph
+  labels:
+    app.kubernetes.io/part-of: axon-graph
+spec:
+  rateLimit:
+    average: 100
+    burst: 50
+    period: 1m
+    sourceCriterion:
+      ipStrategy:
+        depth: 1
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: axon-security-headers
+  namespace: axon-graph
+  labels:
+    app.kubernetes.io/part-of: axon-graph
+spec:
+  headers:
+    stsSeconds: 31536000
+    stsIncludeSubdomains: true
+    stsPreload: true
+    forceSTSHeader: true
+    contentTypeNosniff: true
+    browserXssFilter: true
+    referrerPolicy: "strict-origin-when-cross-origin"
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: gateway
+  namespace: axon-graph
+  labels:
+    app: gateway
+    app.kubernetes.io/part-of: axon-graph
+  annotations:
+    # cert-manager issues and renews the TLS certificate automatically.
+    # The Secret "axon-tls" will be created/updated by cert-manager.
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    # WebSocket upgrade path — must precede the catch-all to get priority
+    - match: PathPrefix(`/ws`)
+      kind: Rule
+      middlewares:
+        - name: axon-ratelimit
+        - name: axon-security-headers
+      services:
+        - name: gateway
+          port: 8000
+          # passHostHeader preserves the Host header for WebSocket upgrades
+          passHostHeader: true
+    # All other API routes
+    - match: PathPrefix(`/`)
+      kind: Rule
+      middlewares:
+        - name: axon-ratelimit
+        - name: axon-security-headers
+      services:
+        - name: gateway
+          port: 8000
+  tls:
+    secretName: axon-tls
+    # Replace with your actual domain
+    domains:
+      - main: axon-graph.example.com
+        sans:
+          - www.axon-graph.example.com
+---
+# HTTP → HTTPS redirect
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: gateway-http-redirect
+  namespace: axon-graph
+  labels:
+    app: gateway
+    app.kubernetes.io/part-of: axon-graph
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: PathPrefix(`/`)
+      kind: Rule
+      middlewares:
+        - name: https-redirect
+      services:
+        - name: gateway
+          port: 8000
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: https-redirect
+  namespace: axon-graph
+  labels:
+    app.kubernetes.io/part-of: axon-graph
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true

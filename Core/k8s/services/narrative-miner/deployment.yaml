@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: narrative-miner
+  namespace: axon-graph
+  labels:
+    app: narrative-miner
+    app.kubernetes.io/part-of: axon-graph
+spec:
+  # 4 replicas — each serves NarrativeHop synapses via vLLM.
+  # vLLM requires significant GPU/memory; see resource limits below.
+  replicas: 4
+  selector:
+    matchLabels:
+      app: narrative-miner
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Roll one at a time to preserve inference capacity during upgrades
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: narrative-miner
+        app.kubernetes.io/part-of: axon-graph
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8092"
+        prometheus.io/path: "/metrics"
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: narrative-miner
+          image: registry.example.com/axon/narrative-miner:latest
+          imagePullPolicy: Always
+          ports:
+            - name: axon
+              containerPort: 8092
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: axon-config
+            - secretRef:
+                name: axon-secrets
+          resources:
+            requests:
+              cpu: "2000m"
+              # vLLM with Mistral-7B requires ≥16 GiB for model weights +
+              # KV-cache at the narrative token budget (NARRATIVE_MAX_TOKENS=400)
+              memory: "16Gi"
+            limits:
+              cpu: "4000m"
+              memory: "24Gi"
+              # Uncomment and configure the GPU resource for real vLLM inference.
+              # nvidia.com/gpu: "1"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8092
+            # Longer initial delay: vLLM model loading can take 60-90 seconds
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8092
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            # HuggingFace model cache — avoids re-downloading on pod restart.
+            # Provision a PVC backed by fast SSD if available.
+            - name: model-cache
+              mountPath: /root/.cache/huggingface
+      volumes:
+        - name: model-cache
+          emptyDir: {}
+          # Production: replace emptyDir with a PVC:
+          # persistentVolumeClaim:
+          #   claimName: narrative-miner-model-cache

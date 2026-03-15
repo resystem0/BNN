@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kuzu
+  namespace: axon-graph
+  labels:
+    app: kuzu
+    app.kubernetes.io/part-of: axon-graph
+spec:
+  serviceName: kuzu
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kuzu
+  template:
+    metadata:
+      labels:
+        app: kuzu
+        app.kubernetes.io/part-of: axon-graph
+    spec:
+      terminationGracePeriodSeconds: 30
+      # fsGroup ensures the kuzu process can write to the mounted PVC regardless
+      # of the container's UID.
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: kuzu
+          # kuzudb/explorer:latest exposes an HTTP API on port 8888.
+          # Replace with a custom image that runs the KuZuDB server directly
+          # once an official server image is available for v0.5+.
+          image: kuzudb/explorer:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8888
+              protocol: TCP
+          env:
+            - name: KUZU_DATABASE_PATH
+              value: "/data/kuzu"
+            # Explorer default; override if the image requires a different var
+            - name: MODE
+              value: "no-shell"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "2Gi"
+            limits:
+              cpu: "4000m"
+              # KuZuDB buffers the working set of the graph in memory;
+              # generous limit prevents OOM on large traversal queries.
+              memory: "16Gi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8888
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8888
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: kuzu-data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: kuzu-data
+        labels:
+          app: kuzu
+          app.kubernetes.io/part-of: axon-graph
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            # 50 GiB accommodates the graph store + corpus embedding index.
+            # Monitor utilisation and expand with `kubectl patch pvc`.
+            storage: 50Gi
+        # storageClassName: fast-ssd  # Recommended: NVMe-backed storage class

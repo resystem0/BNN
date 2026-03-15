@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: domain-miner
+  namespace: axon-graph
+  labels:
+    app: domain-miner
+    app.kubernetes.io/part-of: axon-graph
+spec:
+  # 8 replicas — one per knowledge domain node defined in nodes.yaml.
+  # Each replica handles RAG queries for its assigned domain via KuZuDB + ChromaDB.
+  replicas: 8
+  selector:
+    matchLabels:
+      app: domain-miner
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: domain-miner
+        app.kubernetes.io/part-of: axon-graph
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8091"
+        prometheus.io/path: "/metrics"
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: domain-miner
+          image: registry.example.com/axon/domain-miner:latest
+          imagePullPolicy: Always
+          ports:
+            - name: axon
+              containerPort: 8091
+              protocol: TCP
+          env:
+            # NODE_ID: Each replica uses its ordinal pod name suffix as the
+            # domain node identifier. The app reads this to select the correct
+            # domain from nodes.yaml and mount the right corpus partition.
+            # Because Deployments don't guarantee stable names, it is
+            # recommended to promote this to a StatefulSet if strict per-node
+            # identity is required. For now the app falls back to hostname-
+            # based selection: NODE_ID=$(hostname) is sufficient for soft
+            # affinity to a domain.
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            # CORPUS_ROOT: filesystem path where corpus shards are mounted.
+            # Must match the PVC mountPath below if using persistent corpus data.
+            - name: CORPUS_ROOT
+              value: "/data/corpora"
+          envFrom:
+            - configMapRef:
+                name: axon-config
+            - secretRef:
+                name: axon-secrets
+          volumeMounts:
+            - name: corpora
+              mountPath: /data/corpora
+              readOnly: false
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "2Gi"
+            limits:
+              cpu: "2000m"
+              memory: "6Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8091
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8091
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        # Shared ReadWriteMany corpus volume — provision with an NFS or CephFS
+        # storage class that supports RWX if replicas share a corpus store.
+        # Alternatively, use an emptyDir for ephemeral corpus caching and
+        # load corpora from IPFS on startup.
+        - name: corpora
+          emptyDir: {}

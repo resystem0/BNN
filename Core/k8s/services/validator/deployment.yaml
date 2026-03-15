@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: validator
+  namespace: axon-graph
+  labels:
+    app: validator
+    app.kubernetes.io/part-of: axon-graph
+spec:
+  # 3 replicas — independent validator operators running the scoring loop.
+  # Each replica commits weights independently; consensus emerges from the
+  # Bittensor weight-setting mechanism (COMMIT_QUORUM=0.51 in subnet_config).
+  replicas: 3
+  selector:
+    matchLabels:
+      app: validator
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # At least 2 validators must remain active during upgrades to preserve
+      # quorum (COMMIT_QUORUM=0.51 requires majority agreement).
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: validator
+        app.kubernetes.io/part-of: axon-graph
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8093"
+        prometheus.io/path: "/metrics"
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: validator
+          image: registry.example.com/axon/validator:latest
+          imagePullPolicy: Always
+          ports:
+            - name: axon
+              containerPort: 8093
+              protocol: TCP
+          env:
+            # POD_NAME is injected via Downward API so the application can
+            # construct the path to its replica-specific wallet key file.
+            # Pattern: the app resolves
+            #   ~/.bittensor/wallets/<POD_NAME>/hotkeys/default
+            # or reads AXON_VALIDATOR_HOTKEY_SS58 from a per-pod Secret mount.
+            #
+            # For production multi-operator deployments, replace the shared
+            # axon-secrets reference below with per-replica Secrets and mount
+            # them as files, using POD_NAME to select the correct key at runtime.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          envFrom:
+            - configMapRef:
+                name: axon-config
+            - secretRef:
+                name: axon-secrets
+          volumeMounts:
+            # Wallet directory — mount per-replica wallet Secrets here in
+            # multi-operator setups. Each Secret should contain:
+            #   coldkeypub.txt, hotkeys/default
+            - name: wallet-dir
+              mountPath: /root/.bittensor/wallets
+              readOnly: true
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8093
+            # Scoring loop may take up to one epoch (~72 min) to complete its
+            # first weight commit; give it generous startup time.
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8093
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: wallet-dir
+          # Production: replace with a projected volume combining per-replica
+          # Secrets. Example for replica "validator-0":
+          #   secret:
+          #     secretName: axon-validator-wallet-0
+          emptyDir: {}

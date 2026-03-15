@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ipfs
+  namespace: axon-graph
+  labels:
+    app: ipfs
+    app.kubernetes.io/part-of: axon-graph
+spec:
+  serviceName: ipfs
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ipfs
+  template:
+    metadata:
+      labels:
+        app: ipfs
+        app.kubernetes.io/part-of: axon-graph
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5001"
+        prometheus.io/path: "/debug/metrics/prometheus"
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        # kubo runs as UID 1000 by default
+        runAsUser: 1000
+        fsGroup: 1000
+      initContainers:
+        # Initialize the IPFS repo on first start if it doesn't exist yet.
+        - name: ipfs-init
+          image: ipfs/kubo:v0.28.0
+          command: ["sh", "-c", "[ -f /data/ipfs/config ] || ipfs init --profile server"]
+          env:
+            - name: IPFS_PATH
+              value: /data/ipfs
+          volumeMounts:
+            - name: ipfs-data
+              mountPath: /data/ipfs
+      containers:
+        - name: ipfs
+          image: ipfs/kubo:v0.28.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: swarm-tcp
+              containerPort: 4001
+              protocol: TCP
+            - name: swarm-udp
+              containerPort: 4001
+              protocol: UDP
+            - name: api
+              containerPort: 5001
+              protocol: TCP
+            - name: gateway
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: IPFS_PATH
+              value: /data/ipfs
+          command:
+            - ipfs
+            - daemon
+            - "--migrate=true"
+            - "--agent-version-suffix=axon-graph"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /api/v0/version
+              port: 5001
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/v0/version
+              port: 5001
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: ipfs-data
+              mountPath: /data/ipfs
+  volumeClaimTemplates:
+    - metadata:
+        name: ipfs-data
+        labels:
+          app: ipfs
+          app.kubernetes.io/part-of: axon-graph
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            # 200 GiB for corpus pinning — the full domain corpus across all
+            # knowledge nodes will be pinned here for content-addressed access.
+            storage: 200Gi
+        # storageClassName: standard  # Adjust to your cluster's storage class

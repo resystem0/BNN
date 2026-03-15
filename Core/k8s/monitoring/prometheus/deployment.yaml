@@ -1,0 +1,141 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: axon-graph
+  labels:
+    app: prometheus
+    app.kubernetes.io/part-of: axon-graph
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  strategy:
+    # Recreate avoids two Prometheus instances writing the same TSDB on the PVC
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: prometheus
+        app.kubernetes.io/part-of: axon-graph
+    spec:
+      terminationGracePeriodSeconds: 30
+      serviceAccountName: prometheus
+      securityContext:
+        runAsUser: 65534
+        runAsNonRoot: true
+        fsGroup: 65534
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.52.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--storage.tsdb.retention.time=15d"
+            - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+            - "--web.console.templates=/usr/share/prometheus/consoles"
+            - "--web.enable-lifecycle"
+            - "--web.enable-admin-api"
+          ports:
+            - name: http
+              containerPort: 9090
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: prometheus-config
+              mountPath: /etc/prometheus/prometheus.yml
+              subPath: prometheus.yml
+            - name: prometheus-rules
+              mountPath: /etc/prometheus/rules
+            - name: prometheus-data
+              mountPath: /prometheus
+      volumes:
+        - name: prometheus-config
+          configMap:
+            name: prometheus-config
+        - name: prometheus-rules
+          configMap:
+            name: axon-graph-alerts
+            # The PrometheusRule CRD is consumed by the Prometheus Operator.
+            # If not using the Operator, mount the rules ConfigMap directly:
+            # configMap:
+            #   name: axon-rules-raw
+            optional: true
+        - name: prometheus-data
+          emptyDir: {}
+          # Production: use a PVC for TSDB durability:
+          # persistentVolumeClaim:
+          #   claimName: prometheus-data
+---
+# ServiceAccount required for Kubernetes SD (pod role discovery)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: axon-graph
+  labels:
+    app: prometheus
+    app.kubernetes.io/part-of: axon-graph
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: axon-graph-prometheus
+  labels:
+    app: prometheus
+    app.kubernetes.io/part-of: axon-graph
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - nodes/proxy
+      - services
+      - endpoints
+      - pods
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["extensions", "networking.k8s.io"]
+    resources:
+      - ingresses
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: axon-graph-prometheus
+  labels:
+    app: prometheus
+    app.kubernetes.io/part-of: axon-graph
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: axon-graph-prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: axon-graph

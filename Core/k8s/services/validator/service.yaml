@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: validator
+  namespace: axon-graph
+  labels:
+    app: validator
+    app.kubernetes.io/part-of: axon-graph
+spec:
+  type: ClusterIP
+  selector:
+    app: validator
+  ports:
+    - name: axon
+      port: 8093
+      targetPort: 8093
+      protocol: TCP

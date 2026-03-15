@@ -1,0 +1,45 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: narrative-miner
+  namespace: axon-graph
+  labels:
+    app: narrative-miner
+    app.kubernetes.io/part-of: axon-graph
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: narrative-miner
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          # Lower threshold (60%) than domain-miner because vLLM inference
+          # latency rises steeply once the CPU is saturated (VALIDATOR_TIMEOUT_HOP=5s)
+          averageUtilization: 60
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 75
+  behavior:
+    scaleUp:
+      # Fast scale-up to prevent hop timeouts during traffic spikes
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleDown:
+      # Very conservative scale-down: model is expensive to reload
+      stabilizationWindowSeconds: 600
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 300

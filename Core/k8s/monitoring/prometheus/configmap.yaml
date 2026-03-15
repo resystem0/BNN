@@ -1,0 +1,147 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: axon-graph
+  labels:
+    app: prometheus
+    app.kubernetes.io/part-of: axon-graph
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: axon-graph
+        subnet: "42"
+
+    rule_files:
+      - /etc/prometheus/rules/*.yaml
+
+    scrape_configs:
+      # -----------------------------------------------------------------------
+      # Gateway — REST + WebSocket entry point (FastAPI)
+      # -----------------------------------------------------------------------
+      - job_name: gateway
+        static_configs:
+          - targets:
+              - gateway.axon-graph.svc.cluster.local:8000
+        metrics_path: /metrics
+        scrape_interval: 15s
+
+      # -----------------------------------------------------------------------
+      # Domain miner — RAG axon (bittensor), KuZuDB + ChromaDB
+      # Scrapes every pod via the pod-level annotation discovery.
+      # -----------------------------------------------------------------------
+      - job_name: domain-miner
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - axon-graph
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: domain-miner
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+
+      # -----------------------------------------------------------------------
+      # Narrative miner — LLM story generation (vLLM-backed axon)
+      # -----------------------------------------------------------------------
+      - job_name: narrative-miner
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - axon-graph
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: narrative-miner
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+
+      # -----------------------------------------------------------------------
+      # Validator — scoring loop + weight commits
+      # -----------------------------------------------------------------------
+      - job_name: validator
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - axon-graph
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: validator
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+
+      # -----------------------------------------------------------------------
+      # Redis — session + graph store
+      # -----------------------------------------------------------------------
+      - job_name: redis
+        static_configs:
+          - targets:
+              - redis.axon-graph.svc.cluster.local:9121
+        metrics_path: /metrics
+
+      # -----------------------------------------------------------------------
+      # IPFS kubo — corpus pinning node
+      # -----------------------------------------------------------------------
+      - job_name: ipfs
+        static_configs:
+          - targets:
+              - ipfs.axon-graph.svc.cluster.local:5001
+        metrics_path: /debug/metrics/prometheus
+
+      # -----------------------------------------------------------------------
+      # Prometheus self-monitoring
+      # -----------------------------------------------------------------------
+      - job_name: prometheus
+        static_configs:
+          - targets:
+              - localhost:9090

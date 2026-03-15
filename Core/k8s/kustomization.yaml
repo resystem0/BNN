@@ -1,0 +1,68 @@
+# kustomization.yaml — top-level Kustomize config for axon-graph
+#
+# Deploy everything:
+#   kubectl apply -k Core/k8s/
+#
+# Dry-run:
+#   kubectl apply -k Core/k8s/ --dry-run=client
+#
+# Prerequisites before applying:
+#   1. Traefik v2/v3 installed (for IngressRoute CRD)
+#   2. cert-manager installed with a "letsencrypt-prod" ClusterIssuer
+#   3. Prometheus Operator installed (for PrometheusRule CRD)
+#      — or remove monitoring/prometheus/rules.yaml and mount rules as a raw ConfigMap
+#   4. Edit base/secret.yaml with real credentials (or use external-secrets-operator)
+#   5. Set your domain in services/gateway/ingress.yaml
+#   6. Set storageClassName in infra/*/statefulset.yaml to match your cluster
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: axon-graph
+
+resources:
+  # ── Namespace + shared config ────────────────────────────────────────────
+  - base/namespace.yaml
+  - base/configmap.yaml
+  - base/secret.yaml
+
+  # ── Application services ─────────────────────────────────────────────────
+  - services/gateway/deployment.yaml
+  - services/gateway/service.yaml
+  - services/gateway/ingress.yaml
+
+  - services/domain-miner/deployment.yaml
+  - services/domain-miner/service.yaml
+  - services/domain-miner/hpa.yaml
+
+  - services/narrative-miner/deployment.yaml
+  - services/narrative-miner/service.yaml
+  - services/narrative-miner/hpa.yaml
+
+  - services/validator/deployment.yaml
+  - services/validator/service.yaml
+
+  # ── Infrastructure (stateful) ────────────────────────────────────────────
+  - infra/redis/statefulset.yaml
+  - infra/redis/service.yaml
+
+  - infra/kuzu/statefulset.yaml
+  - infra/kuzu/service.yaml
+
+  - infra/ipfs/statefulset.yaml
+  - infra/ipfs/service.yaml
+
+  # ── Monitoring ───────────────────────────────────────────────────────────
+  - monitoring/prometheus/configmap.yaml
+  - monitoring/prometheus/deployment.yaml
+  - monitoring/prometheus/service.yaml
+  - monitoring/prometheus/rules.yaml
+
+  - monitoring/grafana/configmap.yaml
+  - monitoring/grafana/deployment.yaml
+  - monitoring/grafana/service.yaml
+
+# Common labels applied to every resource
+commonLabels:
+  app.kubernetes.io/part-of: axon-graph
+  app.kubernetes.io/managed-by: kustomize

@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: axon-config
+  namespace: axon-graph
+  labels:
+    app.kubernetes.io/part-of: axon-graph
+data:
+  # Network identity (subnet_config.py: NETUID / NETWORK)
+  AXON_NETUID: "42"
+  AXON_SUBTENSOR_NETWORK: "finney"
+
+  # Infrastructure endpoints
+  AXON_REDIS_URL: "redis://redis:6379"
+  AXON_KUZU_URL: "http://kuzu:8888"
+  AXON_IPFS_API: "/ip4/ipfs/tcp/5001"
+
+  # Redis DB split (subnet_config.py: GRAPH_REDIS_DB / SESSION_REDIS_DB)
+  AXON_GRAPH_REDIS_DB: "0"
+  AXON_SESSION_REDIS_DB: "1"
+  AXON_GRAPH_REDIS_HOST: "redis"
+  AXON_GRAPH_REDIS_PORT: "6379"
+
+  # Metagraph sync interval in seconds
+  AXON_METAGRAPH_SYNC_INTERVAL_S: "60"
+
+  # Validator challenge config (subnet_config.py: CHALLENGE_MAX_TOKENS)
+  AXON_CHALLENGE_MAX_TOKENS: "200"
+
+  # Domain drift threshold (subnet_config.py: DRIFT_THRESHOLD)
+  AXON_DRIFT_THRESHOLD: "0.28"
+
+  # Narrative LLM settings (subnet_config.py: NARRATIVE_MAX_TOKENS)
+  AXON_NARRATIVE_MAX_TOKENS: "400"
+  AXON_NARRATIVE_MODEL: "mistralai/Mistral-7B-Instruct-v0.2"
+
+  # Embedding model (subnet_config.py: EMBEDDING_MODEL)
+  AXON_EMBEDDING_MODEL: "sentence-transformers/all-mpnet-base-v2"
+
+  # Axon ports
+  AXON_MINER_AXON_PORT: "8091"
+  AXON_NARRATIVE_AXON_PORT: "8092"
+
+  # Corpus data root for domain miners
+  CORPUS_ROOT: "/data/corpora"
+
+  # Concurrency limits (subnet_config.py: MAX_CONCURRENT_SESSIONS)
+  AXON_MAX_CONCURRENT_SESSIONS: "500"
+
+  # Orchestrator / gateway
+  AXON_ORCHESTRATOR_HOST: "0.0.0.0"
+  AXON_ORCHESTRATOR_PORT: "8000"
